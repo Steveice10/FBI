@@ -11,6 +11,8 @@
 
 #include "rop.h"
 #include "ui.hpp"
+#include "3dsdb/3dsdb.h"
+
 
 #include <sys/stat.h>
 #include <errno.h>
@@ -29,9 +31,10 @@ typedef enum {
     LAUNCH_TITLE
 } Mode;
 
-std::vector<std::string> extensions = {"cia"};
+std::vector<std::string> extensions = {"cia", "sav"};
+std::vector<std::string> extensionCia = {"cia"};
 
-bool exit = false;
+bool exitFlag = false;
 bool showNetworkPrompts = true;
 u64 freeSpace = 0;
 fs::MediaType destination = fs::SD;
@@ -317,7 +320,7 @@ bool launchTitle(app::App app) {
 bool onLoop() {
     bool launcher = core::launcher();
     if(launcher && hid::pressed(hid::BUTTON_START)) {
-        exit = true;
+        exitFlag = true;
         return true;
     }
 
@@ -417,6 +420,7 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    game_map_init();
     uiInit();
 
     freeSpace = fs::freeSpace(destination);
@@ -437,7 +441,7 @@ int main(int argc, char **argv) {
                     confirmMsg << "all CIAs in the current directory?";
                     if(uiPrompt(gpu::SCREEN_TOP, confirmMsg.str(), true)) {
                         bool failed = false;
-                        std::vector<std::string> contents = fs::contents(currDirectory, false, extensions);
+                        std::vector<std::string> contents = fs::contents(currDirectory, false, extensionCia);
                         int total = contents.size();
                         int curr = 1;
                         for(std::vector<std::string>::iterator it = contents.begin(); it != contents.end(); it++) {
@@ -479,12 +483,14 @@ int main(int argc, char **argv) {
             }, [&](const std::string path, bool &updateList) {
                 std::stringstream confirmMsg;
                 if(mode == INSTALL_CIA) {
+                        std::string extension = fs::extension(path);
+                        if(extension.compare("cia") != 0)  return false;
                     confirmMsg << "Install ";
                 } else {
                     confirmMsg << "Delete ";
                 }
 
-                confirmMsg << "the selected CIA?";
+                confirmMsg << "the selected file?";
                 if(uiPrompt(gpu::SCREEN_TOP, confirmMsg.str(), true)) {
                     bool success = false;
                     if(mode == INSTALL_CIA) {
@@ -539,12 +545,13 @@ int main(int argc, char **argv) {
             });
         }
 
-        if(exit) {
+        if(exitFlag) {
             break;
         }
     }
 
     uiCleanup();
+    game_map_init();
 
     core::exit();
     return 0;
