@@ -483,8 +483,8 @@ int main(int argc, char **argv) {
             }, [&](const std::string path, bool &updateList) {
                 std::stringstream confirmMsg;
                 if(mode == INSTALL_CIA) {
-                        std::string extension = fs::extension(path);
-                        if(extension.compare("cia") != 0)  return false;
+                    std::string extension = fs::extension(path);
+                    if(extension.compare("cia") != 0)  return false;
                     confirmMsg << "Install ";
                 } else {
                     confirmMsg << "Delete ";
