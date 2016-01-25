@@ -308,7 +308,12 @@ void uiGetDirContents(std::vector<SelectableElement> &elements, const std::strin
                     info.push_back("Unique ID: " + uniqueId.str());
                     info.push_back("Product Code: " + std::string(app.productCode));
                     info.push_back("Name: " + std::string(game_map_search(app.titleId)));
-                    info.push_back("Category: " + app::categoryString(app.category));
+                    if(app.category == app::CATEGORY_PATCH) {
+                        u64 titleid = (((u64)app.uniqueId) | 0x0004000000000000ULL);
+                        info.push_back("Patch For: " + std::string(game_map_search(titleid)));
+                    } else {
+                        info.push_back("Category: " + app::categoryString(app.category));
+                    }
                     info.push_back("Version: " + version.str());
                 }
             } else if(extension.compare("sav") == 0) {
@@ -414,7 +419,12 @@ void uiGetApps(std::vector<SelectableElement> &elements, std::vector<app::App> a
         details.push_back("Unique ID: " + uniqueId.str());
         details.push_back("Product Code: " + std::string(app.productCode));
         details.push_back("Name: " + std::string(game_map_search(app.titleId)));
-        details.push_back("Category: " + app::categoryString(app.category));
+        if(app.category == app::CATEGORY_PATCH) {
+            u64 titleid = (((u64)app.uniqueId) | 0x0004000000000000ULL);
+            details.push_back("Patch For: " + std::string(game_map_search(titleid)));
+        } else {
+            details.push_back("Category: " + app::categoryString(app.category));
+        }
         details.push_back("Version: " + version.str());
         details.push_back("Size: " + size.str());
 
