@@ -1,4 +1,6 @@
 #include "ui.hpp"
+#include "3dsdb/3dsdb.h"
+
 
 #include <citrus/core.hpp>
 #include <citrus/err.hpp>
@@ -305,10 +307,24 @@ void uiGetDirContents(std::vector<SelectableElement> &elements, const std::strin
                     info.push_back("Title ID: " + titleId.str());
                     info.push_back("Unique ID: " + uniqueId.str());
                     info.push_back("Product Code: " + std::string(app.productCode));
-                    info.push_back("Platform: " + app::platformString(app.platform));
-                    info.push_back("Category: " + app::categoryString(app.category));
+                    info.push_back("Name: " + std::string(game_map_search(app.titleId)));
+                    if(app.category == app::CATEGORY_PATCH) {
+                        u64 titleid = (((u64)app.uniqueId) | 0x0004000000000000ULL);
+                        info.push_back("Patch For: " + std::string(game_map_search(titleid)));
+                    } else {
+                        info.push_back("Category: " + app::categoryString(app.category));
+                    }
                     info.push_back("Version: " + version.str());
                 }
+            } else if(extension.compare("sav") == 0) {
+                u64 titleId = 0;
+                std::string name = fs::fileName(path);
+                if(name.length() >4) {
+                    std::string base = name.substr(0, name.length() - 4);
+                    std::stringstream converter(base);
+                    converter >> std::hex >> titleId;
+                } 
+                info.push_back("Name: " + std::string(game_map_search(titleId)));
             }
 
             elements.push_back({path, name, info});
@@ -402,8 +418,13 @@ void uiGetApps(std::vector<SelectableElement> &elements, std::vector<app::App> a
         details.push_back("Title ID: " + titleId.str());
         details.push_back("Unique ID: " + uniqueId.str());
         details.push_back("Product Code: " + std::string(app.productCode));
-        details.push_back("Platform: " + app::platformString(app.platform));
-        details.push_back("Category: " + app::categoryString(app.category));
+        details.push_back("Name: " + std::string(game_map_search(app.titleId)));
+        if(app.category == app::CATEGORY_PATCH) {
+            u64 titleid = (((u64)app.uniqueId) | 0x0004000000000000ULL);
+            details.push_back("Patch For: " + std::string(game_map_search(titleid)));
+        } else {
+            details.push_back("Category: " + app::categoryString(app.category));
+        }
         details.push_back("Version: " + version.str());
         details.push_back("Size: " + size.str());
 
