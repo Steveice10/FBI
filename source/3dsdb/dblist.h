@@ -1,6 +1,9 @@
 game_info_t gamelist[] = {
     {0, "<N/A>"},
 
+    {0x0004013800000202, "AGB_FIRM(O3DS)"},
+    {0x0004013820000202, "AGB_FIRM(N3DS)"},
+
     {0x0004000000102900, "3DSurfer"},
     {0x0004000000110100, "Hamsters 2DS"},
     {0x0004000000124200, "blargSnes"},
