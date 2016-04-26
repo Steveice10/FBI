@@ -17,23 +17,25 @@ typedef struct {
     bool populated;
 } titles_data;
 
-#define TITLES_ACTION_COUNT 6
+#define TITLES_ACTION_COUNT 7
 
 static u32 titles_action_count = TITLES_ACTION_COUNT;
 static list_item titles_action_items[TITLES_ACTION_COUNT] = {
         {"Launch Title", COLOR_TEXT, action_launch_title},
         {"Delete Title", COLOR_TEXT, action_delete_title},
+        {"Extract SMDH", COLOR_TEXT, action_extract_smdh},
         {"Browse Save Data", COLOR_TEXT, action_browse_title_save_data},
         {"Import Secure Value", COLOR_TEXT, action_import_secure_value},
         {"Export Secure Value", COLOR_TEXT, action_export_secure_value},
         {"Delete Secure Value", COLOR_TEXT, action_delete_secure_value},
 };
 
-#define CARD_TITLES_ACTION_COUNT 2
+#define CARD_TITLES_ACTION_COUNT 3
 
 static u32 card_titles_action_count = CARD_TITLES_ACTION_COUNT;
 static list_item card_titles_action_items[CARD_TITLES_ACTION_COUNT] = {
         {"Launch Title", COLOR_TEXT, action_launch_title},
+        {"Extract SMDH", COLOR_TEXT, action_extract_smdh},
         {"Browse Save Data", COLOR_TEXT, action_browse_title_save_data},
 };
 
