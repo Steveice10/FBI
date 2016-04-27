@@ -55,6 +55,15 @@ static Result qrinstall_open_src(void* data, u32 index, u32* handle) {
         if(R_SUCCEEDED(res = httpcOpenContext(context, HTTPC_METHOD_GET, qrInstallData->urls[index], 1))) {
             httpcSetSSLOpt(context, SSLCOPT_DisableVerify);
             if(R_SUCCEEDED(res = httpcBeginRequest(context)) && R_SUCCEEDED(res = httpcGetResponseStatusCode(context, &qrInstallData->responseCode, 0))) {
+                if(qrInstallData->responseCode == 301 || qrInstallData->responseCode == 302) {
+                    if(R_SUCCEEDED(res = httpcGetResponseHeader(context, (char*)"Location", qrInstallData->urls[index], URL_MAX))){
+			httpcCloseContext(context); // Kill the existing context;
+			free(context); // Free the memory
+                        res = qrinstall_open_src(data, index, handle); // And try again.
+			return res;
+                    }
+
+                }
                 if(qrInstallData->responseCode == 200) {
                     *handle = (u32) context;
                 } else if(qrInstallData->responseCode == 301 || qrInstallData->responseCode == 302 || qrInstallData->responseCode == 303) {
