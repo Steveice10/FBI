@@ -54,7 +54,7 @@ static Result qrinstall_open_src(void* data, u32 index, u32* handle) {
 
     httpcContext* context = (httpcContext*) calloc(1, sizeof(httpcContext));
     if(context != NULL) {
-        if(R_SUCCEEDED(res = httpcOpenContext(context, HTTPC_METHOD_GET, qrInstallData->urls[index], 1))) {
+        if(R_SUCCEEDED(res = httpcOpenContext(context, HTTPC_METHOD_GET, strtok(qrInstallData->urls[index], "#"), 1))) {
             httpcSetSSLOpt(context, SSLCOPT_DisableVerify);
             if(R_SUCCEEDED(res = httpcBeginRequest(context)) && R_SUCCEEDED(res = httpcGetResponseStatusCode(context, &qrInstallData->responseCode, 0))) {
                 if(qrInstallData->responseCode == 200) {
