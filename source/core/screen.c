@@ -533,6 +533,9 @@ static void screen_draw_quad(float x1, float y1, float x2, float y2, float tx1, 
 
     C3D_ImmSendAttrib(x2, y2, 0.5f, 0.0f);
     C3D_ImmSendAttrib(tx2, ty2, 0.0f, 0.0f);
+        
+    C3D_ImmSendAttrib(x1, y2, 0.5f 0.0f);
+    C3D_ImmSendAttrib(tx2, ty1, 0.0f 0.0f);    
 
     C3D_ImmDrawEnd();
 }
