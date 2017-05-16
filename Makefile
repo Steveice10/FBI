@@ -60,7 +60,7 @@ ifeq ($(TARGET),3DS)
     CPU_SPEED := 268MHz
     ENABLE_L2_CACHE := true
 
-    ICON_FLAGS := --flags visible,ratingrequired,recordusage --cero 153 --esrb 153 --usk 153 --pegigen 153 --pegiptr 153 --pegibbfc 153 --cob 153 --grb 153 --cgsrr 153
+    ICON_FLAGS := --flags visible,recordusage --cero 153 --esrb 153 --usk 153 --pegigen 153 --pegiptr 153 --pegibbfc 153 --cob 153 --grb 153 --cgsrr 153
 
     ROMFS_DIR := romfs
     BANNER_AUDIO := meta/audio_3ds.wav
