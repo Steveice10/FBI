@@ -47,6 +47,10 @@ static void mainmenu_update(ui_view* view, void* data, linked_list* items, list_
         ((void(*)()) selected->data)();
         return;
     }
+    
+    if(hidKeysDown() & KEY_Y) {
+        networkinstall_open();
+    }
 
     if(linked_list_size(items) == 0) {
         linked_list_add(items, &sd);
@@ -67,5 +71,5 @@ static void mainmenu_update(ui_view* view, void* data, linked_list* items, list_
 }
 
 void mainmenu_open() {
-    list_display("Main Menu", "A: Select, START: Exit", NULL, mainmenu_update, mainmenu_draw_top);
+    list_display("Main Menu", "A: Select, Y: Net Install, START: Exit", NULL, mainmenu_update, mainmenu_draw_top);
 }
