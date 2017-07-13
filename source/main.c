@@ -113,6 +113,7 @@ Result init_services() {
 }
 
 static u32 old_time_limit = UINT32_MAX;
+extern int hb_back;
 
 void init() {
     gfxInitDefault();
@@ -173,16 +174,23 @@ void cleanup() {
 }
 
 int main(int argc, const char* argv[]) {
-    if(argc > 0 && envIsHomebrew()) {
-        util_set_3dsx_path(argv[0]);
+    while(aptMainLoop()) {
+        if (hb_back == 1) {
+            if (envIsHomebrew()) {
+                break;
+            }
+        }
+        if(argc > 0 && envIsHomebrew()) {
+            util_set_3dsx_path(argv[0]);
+        }
+
+        init();
+
+        mainmenu_open();
+        while(aptMainLoop() && ui_update());
+
+        cleanup();
+
+        return 0;
     }
-
-    init();
-
-    mainmenu_open();
-    while(aptMainLoop() && ui_update());
-
-    cleanup();
-
-    return 0;
 }
