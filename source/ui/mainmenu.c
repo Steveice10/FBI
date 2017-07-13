@@ -39,7 +39,7 @@ static void mainmenu_update(ui_view* view, void* data, linked_list* items, list_
     if(hidKeysDown() & KEY_START) {
         ui_pop();
         list_destroy(view);
-        hb_back = 1;
+        hb_back = true;
 
         return;
     }

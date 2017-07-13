@@ -113,7 +113,7 @@ Result init_services() {
 }
 
 static u32 old_time_limit = UINT32_MAX;
-extern int hb_back;
+extern bool hb_back;
 
 void init() {
     gfxInitDefault();
@@ -175,7 +175,7 @@ void cleanup() {
 
 int main(int argc, const char* argv[]) {
     while(aptMainLoop()) {
-        if (hb_back == 1 && envIsHomebrew()) {
+        if (hb_back && envIsHomebrew()) {
             break;
         }
         if(argc > 0 && envIsHomebrew()) {
