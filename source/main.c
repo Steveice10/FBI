@@ -176,9 +176,7 @@ void cleanup() {
 int main(int argc, const char* argv[]) {
     while(aptMainLoop()) {
         if (hb_back == 1) {
-            if (envIsHomebrew()) {
-                break;
-            }
+             if (envIsHomebrew()) break;
         }
         if(argc > 0 && envIsHomebrew()) {
             util_set_3dsx_path(argv[0]);
