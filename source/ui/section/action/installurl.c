@@ -57,6 +57,39 @@ static void action_install_url_n3ds_onresponse(ui_view* view, void* data, u32 re
     ((install_url_data*) data)->n3dsContinue = response == PROMPT_YES;
 }
 
+static u32 action_install_url_hex2dec(char c) {
+    if ('0' <= c && c <= '9') {
+        return c - '0';
+    } else if ('a' <= c && c <= 'f') {
+        return c - 'a' + 10;
+    } else if ('A' <= c && c <= 'F') {
+        return c - 'A' + 10;
+    } else {
+        return -1;
+    }
+}
+
+static void action_install_url_decode_url(char url[]) {
+    u32 i = 0;
+    u32 res_len = 0;
+    size_t len = strlen(url);
+    char res[1024];
+    for (i = 0; i < len; ++i) {
+        char c = url[i];
+        if (c != '%') {
+            res[res_len++] = c;
+        } else {
+            char c1 = url[++i];
+            char c0 = url[++i];
+            u32 num = 0;
+            num = action_install_url_hex2dec(c1) * 16 + action_install_url_hex2dec(c0);
+            res[res_len++] = num;
+        }
+    }
+    res[res_len] = '\0';
+    strcpy(url, res);
+}
+
 static void action_install_url_draw_top(ui_view* view, void* data, float x1, float y1, float x2, float y2) {
     install_url_data* installData = (install_url_data*) data;
 
@@ -68,6 +101,9 @@ static void action_install_url_draw_top(ui_view* view, void* data, float x1, flo
         while(urlY < y2 && index < installData->installInfo.total) {
             float urlWidth = 0;
             float urlHeight = 0;
+
+            action_install_url_decode_url(installData->urls[index]);
+
             screen_get_string_size_wrap(&urlWidth, &urlHeight, installData->urls[index], 0.5f, 0.5f, x2 - x1 - 10);
 
             float urlX = (x2 - x1 - urlWidth) / 2;
@@ -79,6 +115,9 @@ static void action_install_url_draw_top(ui_view* view, void* data, float x1, flo
     } else {
         float urlWidth = 0;
         float urlHeight = 0;
+
+        action_install_url_decode_url(installData->urls[installData->installInfo.processed]);
+
         screen_get_string_size_wrap(&urlWidth, &urlHeight, installData->urls[installData->installInfo.processed], 0.5f, 0.5f, x2 - x1 - 10);
 
         float urlX = (x2 - x1 - urlWidth) / 2;
