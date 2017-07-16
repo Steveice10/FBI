@@ -64,7 +64,7 @@ static void task_populate_titledb_thread(void* arg) {
     char* text = (char*) calloc(sizeof(char), maxTextSize);
     if(text != NULL) {
         u32 textSize = 0;
-        if(R_SUCCEEDED(res = task_populate_titledb_download(&textSize, text, maxTextSize, "https://api.titledb.com/v1/cia?only=id&only=size&only=titleid&only=version&only=name_s&only=name_l&only=publisher"))) {
+        if(R_SUCCEEDED(res = task_populate_titledb_download(&textSize, text, maxTextSize, "https://api.titledb.com/v1/cia?only=id&only=size&only=updated_at&only=titleid&only=version&only=name_s&only=name_l&only=publisher"))) {
             json_value* json = json_parse(text, textSize);
             if(json != NULL) {
                 if(json->type == json_array) {
@@ -85,15 +85,17 @@ static void task_populate_titledb_thread(void* arg) {
                                         u32 nameLen = val->u.object.values[j].name_length;
                                         json_value* subVal = val->u.object.values[j].value;
                                         if(subVal->type == json_string) {
-                                            if(strncmp(name, "titleid", nameLen) == 0) {
+                                            if(strncmp(name, "updated_at", nameLen) == 0) {
+                                                strncpy(titledbInfo->updatedAt, subVal->u.string.ptr, sizeof(titledbInfo->updatedAt));
+                                            } else if(strncmp(name, "titleid", nameLen) == 0) {
                                                 titledbInfo->titleId = strtoull(subVal->u.string.ptr, NULL, 16);
-                                            } else if(strncmp(name, "version", nameLen) == 0) {
+                                            /*} else if(strncmp(name, "version", nameLen) == 0) { // TODO: Latest version disabled pending TitleDB pull request.
                                                 u32 major = 0;
                                                 u32 minor = 0;
                                                 u32 micro = 0;
                                                 sscanf(subVal->u.string.ptr, "%lu.%lu.%lu", &major, &minor, &micro);
 
-                                                titledbInfo->latestVersion = ((u8) (major & 0x3F) << 10) | ((u8) (minor & 0x3F) << 4) | ((u8) (micro & 0xF));
+                                                titledbInfo->latestVersion = ((u8) (major & 0x3F) << 10) | ((u8) (minor & 0x3F) << 4) | ((u8) (micro & 0xF));*/
                                             } else if(strncmp(name, "name_s", nameLen) == 0) {
                                                 strncpy(titledbInfo->meta.shortDescription, subVal->u.string.ptr, sizeof(titledbInfo->meta.shortDescription));
                                             } else if(strncmp(name, "name_l", nameLen) == 0) {
@@ -129,7 +131,7 @@ static void task_populate_titledb_thread(void* arg) {
                                         titledb_info* currTitledbInfo = (titledb_info*) currItem->data;
 
                                         if(titledbInfo->titleId == currTitledbInfo->titleId) {
-                                            if(titledbInfo->latestVersion >= currTitledbInfo->latestVersion) {
+                                            if(strncmp(titledbInfo->updatedAt, currTitledbInfo->updatedAt, sizeof(titledbInfo->updatedAt)) >= 0) {
                                                 linked_list_iter_remove(&iter);
                                                 task_free_titledb(currItem);
                                             } else {

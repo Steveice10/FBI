@@ -47,18 +47,24 @@ static Result remoteinstall_set_last_urls(const char* urls) {
     FS_Archive sdmcArchive = 0;
     if(R_SUCCEEDED(res = FSUSER_OpenArchive(&sdmcArchive, ARCHIVE_SDMC, fsMakePath(PATH_EMPTY, "")))) {
         FS_Path path = fsMakePath(PATH_ASCII, "/fbi/lasturls");
-        if(urls == NULL || strlen(urls) == 0) {
-            res = FSUSER_DeleteFile(sdmcArchive, path);
-        } else if(R_SUCCEEDED(res = util_ensure_dir(sdmcArchive, "/fbi/"))) {
-            Handle file = 0;
-            if(R_SUCCEEDED(res = FSUSER_OpenFile(&file, sdmcArchive, path, FS_OPEN_WRITE | FS_OPEN_CREATE, 0))) {
-                u32 bytesWritten = 0;
-                res = FSFILE_Write(file, &bytesWritten, 0, urls, strlen(urls), FS_WRITE_FLUSH | FS_WRITE_UPDATE_TIME);
 
-                Result closeRes = FSFILE_Close(file);
-                if(R_SUCCEEDED(res)) {
-                    res = closeRes;
-                }
+        Handle file = 0;
+        if(R_SUCCEEDED(FSUSER_OpenFile(&file, sdmcArchive, path, FS_OPEN_READ, 0))) {
+            FSFILE_Close(file);
+
+            res = FSUSER_DeleteFile(sdmcArchive, path);
+        }
+
+        if(urls != NULL && strlen(urls) != 0
+           && R_SUCCEEDED(res)
+           && R_SUCCEEDED(res = util_ensure_dir(sdmcArchive, "/fbi/"))
+           && R_SUCCEEDED(res = FSUSER_OpenFile(&file, sdmcArchive, path, FS_OPEN_WRITE | FS_OPEN_CREATE, 0))) {
+            u32 bytesWritten = 0;
+            res = FSFILE_Write(file, &bytesWritten, 0, urls, strlen(urls), FS_WRITE_FLUSH | FS_WRITE_UPDATE_TIME);
+
+            Result closeRes = FSFILE_Close(file);
+            if(R_SUCCEEDED(res)) {
+                res = closeRes;
             }
         }
 
@@ -290,6 +296,10 @@ static void remoteinstall_qr_draw_top(ui_view* view, void* data, float x1, float
     remoteinstall_qr_data* installData = (remoteinstall_qr_data*) data;
 
     if(installData->tex != 0) {
+        svcWaitSynchronization(installData->captureInfo.mutex, U64_MAX);
+        screen_load_texture_untiled(installData->tex, installData->captureInfo.buffer, QR_IMAGE_WIDTH * QR_IMAGE_HEIGHT * sizeof(u16), QR_IMAGE_WIDTH, QR_IMAGE_HEIGHT, GPU_RGB565, false);
+        svcReleaseMutex(installData->captureInfo.mutex);
+
         screen_draw_texture(installData->tex, 0, 0, QR_IMAGE_WIDTH, QR_IMAGE_HEIGHT);
     }
 }
@@ -339,8 +349,6 @@ static void remoteinstall_qr_update(ui_view* view, void* data, float* progress, 
     uint8_t* qrBuf = quirc_begin(installData->qrContext, &w, &h);
 
     svcWaitSynchronization(installData->captureInfo.mutex, U64_MAX);
-
-    screen_load_texture(installData->tex, installData->captureInfo.buffer, QR_IMAGE_WIDTH * QR_IMAGE_HEIGHT * sizeof(u16), QR_IMAGE_WIDTH, QR_IMAGE_HEIGHT, GPU_RGB565, false);
 
     for(int x = 0; x < w; x++) {
         for(int y = 0; y < h; y++) {

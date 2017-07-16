@@ -62,6 +62,28 @@ static void action_install_url_draw_top(ui_view* view, void* data, float x1, flo
 
     if(installData->drawTop != NULL) {
         installData->drawTop(view, installData->userData, x1, y1, x2, y2, installData->installInfo.processed);
+    } else if(installData->installInfo.processed == installData->installInfo.total) {
+        float urlY = y1 + 5;
+        u32 index = 0;
+        while(urlY < y2 && index < installData->installInfo.total) {
+            float urlWidth = 0;
+            float urlHeight = 0;
+            screen_get_string_size_wrap(&urlWidth, &urlHeight, installData->urls[index], 0.5f, 0.5f, x2 - x1 - 10);
+
+            float urlX = (x2 - x1 - urlWidth) / 2;
+            screen_draw_string_wrap(installData->urls[index], urlX, urlY, 0.5f, 0.5f, COLOR_TEXT, false, urlX + urlWidth + 1);
+
+            urlY += urlHeight;
+            index++;
+        }
+    } else {
+        float urlWidth = 0;
+        float urlHeight = 0;
+        screen_get_string_size_wrap(&urlWidth, &urlHeight, installData->urls[installData->installInfo.processed], 0.5f, 0.5f, x2 - x1 - 10);
+
+        float urlX = (x2 - x1 - urlWidth) / 2;
+        float urlY = (y2 - y1 - urlHeight) / 2;
+        screen_draw_string_wrap(installData->urls[installData->installInfo.processed], urlX, urlY, 0.5f, 0.5f, COLOR_TEXT, false, urlX + urlWidth + 1);
     }
 }
 
@@ -287,7 +309,7 @@ static void action_install_url_install_update(ui_view* view, void* data, float* 
     }
 
     *progress = installData->installInfo.currTotal != 0 ? (float) ((double) installData->installInfo.currProcessed / (double) installData->installInfo.currTotal) : 0;
-    snprintf(text, PROGRESS_TEXT_MAX, "%lu / %lu\n%.2f %s / %.2f %s\n%.2f %s/s", installData->installInfo.processed, installData->installInfo.total, util_get_display_size(installData->installInfo.currProcessed), util_get_display_size_units(installData->installInfo.currProcessed), util_get_display_size(installData->installInfo.currTotal), util_get_display_size_units(installData->installInfo.currTotal), util_get_display_size(installData->installInfo.copyBytesPerSecond), util_get_display_size_units(installData->installInfo.copyBytesPerSecond));
+    snprintf(text, PROGRESS_TEXT_MAX, "%lu / %lu\n%.2f %s / %.2f %s\n%.2f %s/s, ETA %s", installData->installInfo.processed, installData->installInfo.total, util_get_display_size(installData->installInfo.currProcessed), util_get_display_size_units(installData->installInfo.currProcessed), util_get_display_size(installData->installInfo.currTotal), util_get_display_size_units(installData->installInfo.currTotal), util_get_display_size(installData->installInfo.copyBytesPerSecond), util_get_display_size_units(installData->installInfo.copyBytesPerSecond), util_get_display_eta(installData->installInfo.estimatedRemainingSeconds));
 }
 
 static void action_install_url_confirm_onresponse(ui_view* view, void* data, u32 response) {
@@ -369,6 +391,8 @@ void action_install_url(const char* confirmMessage, const char* urls, void* user
 
     data->installInfo.copyBufferSize = 128 * 1024;
     data->installInfo.copyEmpty = false;
+
+    data->installInfo.processed = data->installInfo.total;
 
     data->installInfo.isSrcDirectory = action_install_url_is_src_directory;
     data->installInfo.makeDstDirectory = action_install_url_make_dst_directory;

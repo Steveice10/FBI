@@ -526,6 +526,18 @@ Result util_close_archive(FS_Archive archive) {
     return FSUSER_CloseArchive(archive);
 }
 
+const char* util_get_display_eta(u32 seconds) {
+    static char disp[9];
+
+    u8 hours     = seconds / 3600;
+    seconds     -= hours * 3600;
+    u8 minutes   = seconds / 60;
+    seconds     -= minutes* 60;
+
+    snprintf(disp, 9, "%02u:%02u:%02u", hours, minutes, (u8) seconds);
+    return disp;
+}
+
 double util_get_display_size(u64 size) {
     double s = size;
     if(s > 1024) {
@@ -737,7 +749,6 @@ Result util_http_open_ranged(httpcContext* context, u32* responseCode, const cha
             if(R_SUCCEEDED(res = httpcSetSSLOpt(context, SSLCOPT_DisableVerify))
                && (!userAgent || R_SUCCEEDED(res = httpcAddRequestHeaderField(context, "User-Agent", HTTP_USER_AGENT)))
                && (rangeStart == 0 || R_SUCCEEDED(res = httpcAddRequestHeaderField(context, "Range", range)))
-               && R_SUCCEEDED(res = httpcAddRequestHeaderField(context, "Accept-Encoding", "gzip, deflate"))
                && R_SUCCEEDED(res = httpcSetKeepAlive(context, HTTPC_KEEPALIVE_ENABLED))
                && R_SUCCEEDED(res = httpcBeginRequest(context))
                && R_SUCCEEDED(res = httpcGetResponseStatusCodeTimeout(context, &response, HTTP_TIMEOUT))) {

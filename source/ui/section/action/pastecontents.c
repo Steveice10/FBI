@@ -78,32 +78,28 @@ static Result action_paste_contents_make_dst_directory(void* data, u32 index) {
         Handle dirHandle = 0;
         if(R_SUCCEEDED(FSUSER_OpenDirectory(&dirHandle, pasteData->target->archive, *fsPath))) {
             FSDIR_Close(dirHandle);
-        } else {
-            res = FSUSER_CreateDirectory(pasteData->target->archive, *fsPath, attributes);
+        } else if(R_SUCCEEDED(res = FSUSER_CreateDirectory(pasteData->target->archive, *fsPath, attributes))) {
+            char parentPath[FILE_PATH_MAX];
+            util_get_parent_path(parentPath, dstPath, FILE_PATH_MAX);
+
+            char baseDstPath[FILE_PATH_MAX];
+            if(pasteData->target->attributes & FS_ATTRIBUTE_DIRECTORY) {
+                strncpy(baseDstPath, pasteData->target->path, FILE_PATH_MAX);
+            } else {
+                util_get_parent_path(baseDstPath, pasteData->target->path, FILE_PATH_MAX);
+            }
+
+            if(strncmp(parentPath, baseDstPath, FILE_PATH_MAX) == 0) {
+                list_item* dstItem = NULL;
+                if(R_SUCCEEDED(res) && R_SUCCEEDED(task_create_file_item(&dstItem, pasteData->target->archive, dstPath, attributes))) {
+                    linked_list_add(pasteData->items, dstItem);
+                }
+            }
         }
 
         util_free_path_utf8(fsPath);
     } else {
         res = R_FBI_OUT_OF_MEMORY;
-    }
-
-    if(R_SUCCEEDED(res)) {
-        char parentPath[FILE_PATH_MAX];
-        util_get_parent_path(parentPath, dstPath, FILE_PATH_MAX);
-
-        char baseDstPath[FILE_PATH_MAX];
-        if(pasteData->target->attributes & FS_ATTRIBUTE_DIRECTORY) {
-            strncpy(baseDstPath, pasteData->target->path, FILE_PATH_MAX);
-        } else {
-            util_get_parent_path(baseDstPath, pasteData->target->path, FILE_PATH_MAX);
-        }
-
-        if(strncmp(parentPath, baseDstPath, FILE_PATH_MAX) == 0) {
-            list_item* dstItem = NULL;
-            if(R_SUCCEEDED(res) && R_SUCCEEDED(task_create_file_item(&dstItem, pasteData->target->archive, dstPath, attributes))) {
-                linked_list_add(pasteData->items, dstItem);
-            }
-        }
     }
 
     return res;
@@ -283,7 +279,7 @@ static void action_paste_contents_update(ui_view* view, void* data, float* progr
     }
 
     *progress = pasteData->pasteInfo.currTotal != 0 ? (float) ((double) pasteData->pasteInfo.currProcessed / (double) pasteData->pasteInfo.currTotal) : 0;
-    snprintf(text, PROGRESS_TEXT_MAX, "%lu / %lu\n%.2f %s / %.2f %s\n%.2f %s/s", pasteData->pasteInfo.processed, pasteData->pasteInfo.total, util_get_display_size(pasteData->pasteInfo.currProcessed), util_get_display_size_units(pasteData->pasteInfo.currProcessed), util_get_display_size(pasteData->pasteInfo.currTotal), util_get_display_size_units(pasteData->pasteInfo.currTotal), util_get_display_size(pasteData->pasteInfo.copyBytesPerSecond), util_get_display_size_units(pasteData->pasteInfo.copyBytesPerSecond));
+    snprintf(text, PROGRESS_TEXT_MAX, "%lu / %lu\n%.2f %s / %.2f %s\n%.2f %s/s, ETA %s", pasteData->pasteInfo.processed, pasteData->pasteInfo.total, util_get_display_size(pasteData->pasteInfo.currProcessed), util_get_display_size_units(pasteData->pasteInfo.currProcessed), util_get_display_size(pasteData->pasteInfo.currTotal), util_get_display_size_units(pasteData->pasteInfo.currTotal), util_get_display_size(pasteData->pasteInfo.copyBytesPerSecond), util_get_display_size_units(pasteData->pasteInfo.copyBytesPerSecond), util_get_display_eta(pasteData->pasteInfo.estimatedRemainingSeconds));
 }
 
 static void action_paste_contents_onresponse(ui_view* view, void* data, u32 response) {
