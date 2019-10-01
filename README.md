@@ -27,4 +27,6 @@ Banner: Originally created by [OctopusRift](http://gbatemp.net/members/octopusri
 
 Logo: [PabloMK7](http://gbatemp.net/members/pablomk7.345712/)
 
+Intro Audio: [Souliousery](https://gbatemp.net/members/souliousery.437685/)
+
 SPI Protocol Information: [TuxSH](https://github.com/TuxSH/) ([TWLSaveTool](https://github.com/TuxSH/TWLSaveTool))
