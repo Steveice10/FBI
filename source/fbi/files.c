@@ -107,7 +107,7 @@ static void files_action_update(ui_view* view, void* data, linked_list* items, l
 
             Result res = 0;
             if(R_SUCCEEDED(res = clipboard_set_contents(actionData->parent->archive, info->path, selected == &copy_all_contents))) {
-                prompt_display_notify("Success", selected == &copy_all_contents ? "Current directory contents copied to clipboard." : (info->attributes & FS_ATTRIBUTE_DIRECTORY) ? "Current directory copied to clipboard." : "File copied to clipboard.", COLOR_TEXT, info, task_draw_file_info, NULL);
+                prompt_display_notify("Success", selected == &copy_all_contents ? "Directory contents copied to clipboard." : (info->attributes & FS_ATTRIBUTE_DIRECTORY) ? "Current directory copied to clipboard." : "File copied to clipboard.", COLOR_TEXT, info, task_draw_file_info, NULL);
             } else {
                 error_display_res(info, task_draw_file_info, res, "Failed to copy to clipboard.");
             }
@@ -171,7 +171,7 @@ static void files_action_update(ui_view* view, void* data, linked_list* items, l
 static void files_action_open(linked_list* items, list_item* selected, files_data* parent) {
     files_action_data* data = (files_action_data*) calloc(1, sizeof(files_action_data));
     if(data == NULL) {
-        error_display(NULL, NULL, "Failed to allocate files action data.");
+        error_display(NULL, NULL, "Failed to allocate file action data.");
 
         return;
     }
