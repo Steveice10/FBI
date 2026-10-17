@@ -19,10 +19,10 @@ static Result task_populate_pending_titles_from(populate_pending_titles_data* da
     Result res = 0;
 
     u32 pendingTitleCount = 0;
-    if(R_SUCCEEDED(res = AM_GetPendingTitleCount(&pendingTitleCount, mediaType, AM_STATUS_MASK_INSTALLING | AM_STATUS_MASK_AWAITING_FINALIZATION))) {
+    if(R_SUCCEEDED(res = AM_GetNumImportTitleContexts(&pendingTitleCount, mediaType, AM_PENDING_NON_SYSTEM | AM_PENDING_SYSTEM))) {
         u64* pendingTitleIds = (u64*) calloc(pendingTitleCount, sizeof(u64));
         if(pendingTitleIds != NULL) {
-            if(R_SUCCEEDED(res = AM_GetPendingTitleList(&pendingTitleCount, pendingTitleCount, mediaType, AM_STATUS_MASK_INSTALLING | AM_STATUS_MASK_AWAITING_FINALIZATION, pendingTitleIds))) {
+            if(R_SUCCEEDED(res = AM_GetImportTitleContextList(&pendingTitleCount, pendingTitleCount, mediaType, AM_PENDING_NON_SYSTEM | AM_PENDING_SYSTEM, pendingTitleIds))) {
                 qsort(pendingTitleIds, pendingTitleCount, sizeof(u64), task_populate_pending_titles_compare_ids);
 
                 AM_PendingTitleEntry* pendingTitleInfos = (AM_PendingTitleEntry*) calloc(pendingTitleCount, sizeof(AM_PendingTitleEntry));

@@ -5,8 +5,10 @@
 
 #include <3ds.h>
 #include <curl/curl.h>
+#include <jansson.h>
 
 #include "error.h"
+#include "../http.h"
 #include "prompt.h"
 #include "../error.h"
 #include "../screen.h"
@@ -270,6 +272,8 @@ static const char* module_to_string(Result res) {
 }
 
 static const char* description_to_string(Result res) {
+    static char descriptionString[256];
+
     int module = R_MODULE(res);
     int description = R_DESCRIPTION(res);
 
@@ -634,6 +638,12 @@ static const char* description_to_string(Result res) {
                                 return "HTTP: Unknown Response Code";
                         }
                     } else if(res >= R_APP_CURL_ERROR_BASE && res < R_APP_CURL_ERROR_END) {
+                        const char* detail = http_curl_detail_message();
+                        if(detail[0] != '\0') {
+                            snprintf(descriptionString, sizeof(descriptionString), "%s (%s)", curl_easy_strerror(res - R_APP_CURL_ERROR_BASE), detail);
+                            return descriptionString;
+                        }
+
                         return curl_easy_strerror(res - R_APP_CURL_ERROR_BASE);
                     }
 

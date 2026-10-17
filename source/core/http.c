@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
 
 #include <3ds.h>
 #include <curl/curl.h>
@@ -242,6 +243,11 @@ typedef struct {
     void* buf;
     u32 pos;
 
+    // Total bytes handed to the callback so far: a transport failure after data has been
+    // delivered must not trigger a restart, because the destination (a CIA install handle
+    // in particular) only accepts one sequential stream per open.
+    u64 delivered;
+
     Result res;
 } http_curl_data;
 
@@ -263,10 +269,55 @@ static size_t http_curl_write_callback(char* ptr, size_t size, size_t nmemb, voi
         if(curlData->pos == curlData->bufferSize) {
             curlData->res = curlData->callback(curlData->userData, curlData->buf, curlData->bufferSize);
             curlData->pos = 0;
+
+            if(R_SUCCEEDED(curlData->res)) {
+                curlData->delivered += curlData->bufferSize;
+            }
         }
     }
 
     return R_SUCCEEDED(curlData->res) ? size * nmemb : 0;
+}
+
+// The soc service's default socket buffers are small, which caps the TCP receive window and
+// therefore in-flight bytes over high-latency links. Request larger buffers explicitly the
+// same way 3DS FTP servers do for the opposite direction. Zero disables the setsockopt for
+// the socket (used by A/B profiling to isolate the option); errors are ignored either way,
+// as the stack clamps to its own limits.
+// 48K/48K measured fastest of the sizes the soc stack accepts without breaking the
+// connection (256K/64K reliably kills the TLS handshake mid-flight; 64K is also broken;
+// 32K-56K work, 48K measured best across repeated hardware runs).
+static int sCurlRcvBuf = 48 * 1024;
+static int sCurlSndBuf = 48 * 1024;
+
+void http_curl_set_socket_buffers(int rcvbuf, int sndbuf) {
+    sCurlRcvBuf = rcvbuf;
+    sCurlSndBuf = sndbuf;
+}
+
+static int http_curl_sockopt_callback(void* userdata, curl_socket_t fd, curlsocktype purpose) {
+    (void) userdata;
+    (void) purpose;
+
+    if(sCurlRcvBuf > 0) {
+        setsockopt(fd, SOL_SOCKET, SO_RCVBUF, (const void*) &sCurlRcvBuf, sizeof(sCurlRcvBuf));
+    }
+
+    if(sCurlSndBuf > 0) {
+        setsockopt(fd, SOL_SOCKET, SO_SNDBUF, (const void*) &sCurlSndBuf, sizeof(sCurlSndBuf));
+    }
+
+    return CURL_SOCKOPT_OK;
+}
+
+// Detailed failure text from the last curl transfer; downloads are serialized, so a single
+// buffer is safe. Surfaced through the error dialog because the transport error alone (for
+// example "SSL connect error") does not distinguish a handshake problem from entropy or
+// certificate issues.
+static char http_curl_detail[CURL_ERROR_SIZE];
+
+const char* http_curl_detail_message(void) {
+    return http_curl_detail;
 }
 
 int http_curl_xfer_info_callback(void* clientp, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow) {
@@ -283,91 +334,158 @@ int http_curl_xfer_info_callback(void* clientp, curl_off_t dltotal, curl_off_t d
     return 0;
 }
 
-Result http_download_callback(const char* url, u32 bufferSize, void* userData, Result (*callback)(void* userData, void* buffer, size_t size),
-                                                                               Result (*checkRunning)(void* userData),
-                                                                               Result (*progress)(void* userData, u64 total, u64 curr)) {
+// Primary transport: libcurl reads the socket directly in-process and decrypts TLS in-process
+// with mbedtls. The HTTPC service, by contrast, mediates every byte through a system service
+// hop with its own fixed internal buffering, and its TLS path through the SSLC service caps
+// practical throughput at roughly 100-250 KB/s (the eShop's own downloads behave the same).
+// Sockets are widened through the sockopt callback above.
+static Result http_curl_download(const char* url, u32 bufferSize, void* userData, Result (*callback)(void* userData, void* buffer, size_t size),
+                                 Result (*checkRunning)(void* userData), Result (*progress)(void* userData, u64 total, u64 curr), void* buf, u64* delivered) {
+    http_curl_data curlData = {bufferSize, userData, callback, checkRunning, progress, buf, 0, 0, 0};
     Result res = 0;
 
-    void* buf = malloc(bufferSize);
-    if(buf != NULL) {
-        httpc_context context = NULL;
-        if(R_SUCCEEDED(res = httpc_open(&context, url, true))) {
-            u32 dlSize = 0;
-            if(R_SUCCEEDED(res = httpc_get_size(context, &dlSize))) {
-                if(progress != NULL) {
-                    progress(userData, dlSize, 0);
-                }
+    CURL* curl = curl_easy_init();
+    if(curl != NULL) {
+        http_curl_detail[0] = '\0';
 
-                u32 total = 0;
-                u32 currSize = 0;
-                while(total < dlSize
-                      && (checkRunning == NULL || R_SUCCEEDED(res = checkRunning(userData)))
-                      && R_SUCCEEDED(res = httpc_read(context, &currSize, buf, bufferSize))
-                      && R_SUCCEEDED(res = callback(userData, buf, currSize))) {
-                    if(progress != NULL) {
-                        progress(userData, dlSize, total);
-                    }
+        curl_easy_setopt(curl, CURLOPT_URL, url);
+        curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, http_curl_detail);
+        curl_easy_setopt(curl, CURLOPT_BUFFERSIZE, bufferSize);
+        curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "");
+        curl_easy_setopt(curl, CURLOPT_USERAGENT, HTTP_USER_AGENT);
+        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, (long) HTTP_TIMEOUT_SEC);
+        curl_easy_setopt(curl, CURLOPT_MAXREDIRS, (long) HTTP_MAX_REDIRECTS);
+        curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+        curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+        curl_easy_setopt(curl, CURLOPT_SOCKOPTFUNCTION, http_curl_sockopt_callback);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, http_curl_write_callback);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*) &curlData);
+        curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+        curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, http_curl_xfer_info_callback);
+        curl_easy_setopt(curl, CURLOPT_XFERINFODATA, (void*) &curlData);
 
-                    total += currSize;
-                }
+        CURLcode ret = curl_easy_perform(curl);
 
-                Result closeRes = httpc_close(context);
-                if(R_SUCCEEDED(res)) {
-                    res = closeRes;
-                }
-            }
-        } else if(res == R_HTTP_TLS_VERIFY_FAILED) {
-            res = 0;
+        if(ret == CURLE_OK && curlData.pos != 0) {
+            size_t tail = curlData.pos;
+            curlData.res = curlData.callback(curlData.userData, curlData.buf, tail);
+            curlData.pos = 0;
 
-            CURL* curl = curl_easy_init();
-            if(curl != NULL) {
-                http_curl_data curlData = {bufferSize, userData, callback, checkRunning, progress, buf, 0, 0};
-
-                curl_easy_setopt(curl, CURLOPT_URL, url);
-                curl_easy_setopt(curl, CURLOPT_BUFFERSIZE, bufferSize);
-                curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "");
-                curl_easy_setopt(curl, CURLOPT_USERAGENT, HTTP_USER_AGENT);
-                curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, (long) HTTP_TIMEOUT_SEC);
-                curl_easy_setopt(curl, CURLOPT_MAXREDIRS, (long) HTTP_MAX_REDIRECTS);
-                curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-                curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
-                curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
-                curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, (long) CURL_HTTP_VERSION_2TLS);
-                curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, http_curl_write_callback);
-                curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*) &curlData);
-                curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
-                curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, http_curl_xfer_info_callback);
-                curl_easy_setopt(curl, CURLOPT_XFERINFODATA, (void*) &curlData);
-
-                CURLcode ret = curl_easy_perform(curl);
-
-                if(ret == CURLE_OK && curlData.pos != 0) {
-                    curlData.res = curlData.callback(curlData.userData, curlData.buf, curlData.pos);
-                    curlData.pos = 0;
-                }
-
-                res = curlData.res;
-
-                if(R_SUCCEEDED(res) && ret != CURLE_OK) {
-                    if(ret == CURLE_HTTP_RETURNED_ERROR) {
-                        long responseCode = 0;
-                        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode);
-
-                        res = R_APP_HTTP_ERROR_BASE + responseCode;
-                    } else {
-                        res = R_APP_CURL_ERROR_BASE + ret;
-                    }
-                }
-
-                curl_easy_cleanup(curl);
-            } else {
-                res = R_APP_CURL_INIT_FAILED;
+            if(R_SUCCEEDED(curlData.res)) {
+                curlData.delivered += tail;
             }
         }
 
+        res = curlData.res;
+
+        if(R_SUCCEEDED(res) && ret != CURLE_OK) {
+            if(ret == CURLE_HTTP_RETURNED_ERROR) {
+                long responseCode = 0;
+                curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode);
+
+                res = R_APP_HTTP_ERROR_BASE + responseCode;
+            } else {
+                res = R_APP_CURL_ERROR_BASE + ret;
+            }
+        }
+
+        curl_easy_cleanup(curl);
+    } else {
+        res = R_APP_CURL_INIT_FAILED;
+    }
+
+    *delivered = curlData.delivered;
+    return res;
+}
+
+// Fallback transport: the HTTPC system service. Only used when curl fails before any data has
+// been delivered, so a partially written destination is never restarted in place.
+static Result httpc_download(const char* url, u32 bufferSize, void* userData, Result (*callback)(void* userData, void* buffer, size_t size),
+                             Result (*checkRunning)(void* userData), Result (*progress)(void* userData, u64 total, u64 curr), void* buf) {
+    Result res = 0;
+
+    httpc_context context = NULL;
+    if(R_SUCCEEDED(res = httpc_open(&context, url, true))) {
+        u32 dlSize = 0;
+        if(R_SUCCEEDED(res = httpc_get_size(context, &dlSize))) {
+            if(progress != NULL) {
+                progress(userData, dlSize, 0);
+            }
+
+            u32 total = 0;
+            u32 currSize = 0;
+            // dlSize is the transfer size reported by the HTTPC service: the compressed
+            // size when the server applies Content-Encoding, and zero when no
+            // Content-Length is present (chunked responses). The inflated bytes handed to
+            // the callback therefore cannot be reliably compared against dlSize, so keep
+            // reading until the service itself reports the stream finished: httpc_read
+            // only returns zero bytes with a success result once the download has ended.
+            while((dlSize == 0 || total < dlSize)
+                  && (checkRunning == NULL || R_SUCCEEDED(res = checkRunning(userData)))
+                  && R_SUCCEEDED(res = httpc_read(context, &currSize, buf, bufferSize))
+                  && currSize > 0
+                  && R_SUCCEEDED(res = callback(userData, buf, currSize))) {
+                if(progress != NULL) {
+                    progress(userData, dlSize, total);
+                }
+
+                total += currSize;
+            }
+
+            Result closeRes = httpc_close(context);
+            if(R_SUCCEEDED(res)) {
+                res = closeRes;
+            }
+        }
+    }
+
+    return res;
+}
+
+Result http_download_transport_curl(const char* url, u32 bufferSize, void* userData, Result (*callback)(void* userData, void* buffer, size_t size),
+                                    Result (*checkRunning)(void* userData), Result (*progress)(void* userData, u64 total, u64 curr), u64* delivered) {
+    Result res = R_APP_OUT_OF_MEMORY;
+    void* buf = malloc(bufferSize);
+    if(buf != NULL) {
+        res = http_curl_download(url, bufferSize, userData, callback, checkRunning, progress, buf, delivered);
         free(buf);
     } else {
-        res = R_APP_OUT_OF_MEMORY;
+        *delivered = 0;
+    }
+
+    return res;
+}
+
+Result http_download_transport_httpc(const char* url, u32 bufferSize, void* userData, Result (*callback)(void* userData, void* buffer, size_t size),
+                                     Result (*checkRunning)(void* userData), Result (*progress)(void* userData, u64 total, u64 curr)) {
+    Result res = R_APP_OUT_OF_MEMORY;
+    void* buf = malloc(bufferSize);
+    if(buf != NULL) {
+        res = httpc_download(url, bufferSize, userData, callback, checkRunning, progress, buf);
+        free(buf);
+    }
+
+    return res;
+}
+
+Result http_download_callback(const char* url, u32 bufferSize, void* userData, Result (*callback)(void* userData, void* buffer, size_t size),
+                                                                               Result (*checkRunning)(void* userData),
+                                                                               Result (*progress)(void* userData, u64 total, u64 curr)) {
+    u64 delivered = 0;
+    Result res = http_download_transport_curl(url, bufferSize, userData, callback, checkRunning, progress, &delivered);
+
+    if(R_FAILED(res) && delivered == 0) {
+        // The HTTPC fallback may also fail (often for the same underlying reason); the
+        // curl error is reported in that case because it carries the more specific
+        // transport detail for the primary transport.
+        Result curlRes = res;
+        res = http_download_transport_httpc(url, bufferSize, userData, callback, checkRunning, progress);
+
+        if(R_FAILED(res)) {
+            res = curlRes;
+        }
     }
 
     return res;

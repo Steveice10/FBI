@@ -99,6 +99,7 @@ Result init_services() {
                && INIT_SERVICE(acInit(), acExit)
                && INIT_SERVICE(ptmuInit(), ptmuExit)
                && INIT_SERVICE(pxiDevInit(), pxiDevExit)
+               && INIT_SERVICE(psInit(), psExit)
                && INIT_SERVICE(httpcInit(0), httpcExit)
                && INIT_SERVICE(socInit(soc_buffer, 0x100000), (void (*)()) socExit));
         }
